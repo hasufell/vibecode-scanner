@@ -20,20 +20,32 @@ library
     import:           warnings
     exposed-modules:  VibeCode.Audit
                       VibeCode.Agents
+                      VibeCode.Cabal
+                      VibeCode.CabalPlan
                       VibeCode.Logging
                       VibeCode.Scan
                       VibeCode.Types
+                      VibeCode.Types.CabalPlan
                       VibeCode.Types.JSON
 
     -- other-modules:
     -- other-extensions:
     build-depends:    aeson
                     , base >=4.18.3.0
+                    , bytestring
+                    , Cabal-syntax
+                    , containers
                     , directory
                     , filepath
                     , filepattern
+                    , generic-lens
+                    , lens
+                    , mtl
+                    , oops
                     , process
                     , temporary
+                    , text
+                    , topograph
     hs-source-dirs:   lib
     default-language: Haskell2010
 

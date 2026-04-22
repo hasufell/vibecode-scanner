@@ -4,29 +4,39 @@ module VibeCode.Types where
 
 import GHC.Generics
 
-data ScanResult = ScanResult {
-    resultAgent :: [AgentResult]
+data ScanResult = ScanResult
+  { resultPkg :: String
+  , resultAgent :: [AgentResult]
   }
-  deriving (Generic, Show, Eq)
+  deriving (Eq, Generic, Show)
 
-data AgentResult = AgentResult {
-    arName        :: String
-  , arFiles       :: [FilePath]
+data AuditResult = AuditResult
+  { auditResult :: [ScanResult]
+  }
+  deriving (Eq, Generic, Show)
+
+data AgentResult = AgentResult
+  { arName :: String
+  , arFiles :: [FilePath]
   , arDirectories :: [FilePath]
-  , arCommits     :: Int
+  , arCommits :: Int
   }
-  deriving (Generic, Show, Eq)
+  deriving (Eq, Generic, Show)
 
-data Agent = Agent {
-    aiName        :: String
-  , aiUrl         :: String
-  , aiFiles       :: [FilePath]
+data Agent = Agent
+  { aiName :: String
+  , aiUrl :: String
+  , aiFiles :: [FilePath]
   , aiDirectories :: [FilePath]
-  , aiGitNeedles  :: [GitNeedle]
+  , aiGitNeedles :: [GitNeedle]
   }
-  deriving (Generic, Show, Eq)
+  deriving (Eq, Generic, Show)
 
-data GitNeedle = GitCommitMessage String
-               | GitAuthor String
-  deriving (Generic, Show, Eq)
+data GitNeedle
+  = GitCommitMessage String
+  | GitAuthor String
+  deriving (Eq, Generic, Show)
+
+
+
 

@@ -1,0 +1,90 @@
+# Stylish-haskell configuration file
+#
+# See `stylish-haskell --defaults` or
+# https://github.com/jaspervdj/stylish-haskell/blob/master/data/stylish-haskell.yaml
+# for usage.
+
+columns: 80 # Should match .editorconfig
+steps:
+  - imports:
+      align: group
+      empty_list_align: inherit
+      list_align: new_line
+      pad_module_names: true
+      list_padding: 4
+      long_list_align: new_line_multiline
+      separate_lists: true
+      space_surround: true
+
+  - language_pragmas:
+      align: false
+      remove_redundant: true
+      style: vertical
+
+  # Align the right hand side of some elements.  This is quite conservative
+  # and only applies to statements where each element occupies a single
+  # line.
+  # Possible values:
+  # - always - Always align statements.
+  # - adjacent - Align statements that are on adjacent lines in groups.
+  # - never - Never align statements.
+  # All default to always.
+  - simple_align:
+      cases: always
+      top_level_patterns: always
+      records: always
+      multi_way_if: always
+
+  - records:
+      # How to format equals sign between type constructor and data constructor.
+      # Possible values:
+      # - "same_line" -- leave "=" AND data constructor on the same line as the type constructor.
+      # - "indent N" -- insert a new line and N spaces from the beginning of the next line.
+      equals: "indent 2"
+
+      # How to format first field of each record constructor.
+      # Possible values:
+      # - "same_line" -- "{" and first field goes on the same line as the data constructor.
+      # - "indent N" -- insert a new line and N spaces from the beginning of the data constructor
+      first_field: "indent 2"
+
+      # How many spaces to insert between the column with "," and the beginning of the comment in the next line.
+      field_comment: 2
+
+      # How many spaces to insert before "deriving" clause. Deriving clauses are always on separate lines.
+      deriving: 2
+
+      # How many spaces to insert before "via" clause counted from indentation of deriving clause
+      # Possible values:
+      # - "same_line" -- "via" part goes on the same line as "deriving" keyword.
+      # - "indent N" -- insert a new line and N spaces from the beginning of "deriving" keyword.
+      via: "indent 2"
+
+      # Sort typeclass names in the "deriving" list alphabetically.
+      sort_deriving: true
+
+      # Whether or not to break enums onto several lines
+      #
+      # Default: false
+      break_enums: true
+
+      # Whether or not to break single constructor data types before `=` sign
+      #
+      # Default: true
+      break_single_constructors: false
+
+      # Whether or not to curry constraints on function.
+      #
+      # E.g: @allValues :: Enum a => Bounded a => Proxy a -> [a]@
+      #
+      # Instead of @allValues :: (Enum a, Bounded a) => Proxy a -> [a]@
+      #
+      # Default: false
+      curried_context: true
+
+language_extensions:
+# Workaround for stylish-haskell bug (jaspervdj/stylish-haskell#230)
+- FlexibleContexts
+# Workaround for stylish-haskell bug (jaspervdj/stylish-haskell#103)
+- MultiParamTypeClasses
+- CPP

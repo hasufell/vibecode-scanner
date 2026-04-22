@@ -1,16 +1,19 @@
-{-# LANGUAGE LambdaCase      #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Main where
 
-import VibeCode.Types.JSON ()
-import VibeCode.Scan (scanHackagePackage)
+import VibeCode.Audit      ( audit )
+import VibeCode.Scan       ( scanHackagePackage, scanRemoteRepo )
+import VibeCode.Types.JSON
+    ()
 
 import Data.Aeson.Encode.Pretty
 import Data.Maybe
+import Data.Text                ( Text )
 import Options.Applicative
 
-import qualified Data.Text.Lazy as T
+import qualified Data.Text.Lazy          as T
 import qualified Data.Text.Lazy.Encoding as TE
 
 -- https://github.com/pcapriotti/optparse-applicative/issues/148
@@ -49,26 +52,30 @@ invertableSwitch' longopt shortopt defv enmod dismod = optional
   where
     nolongopt = "no-" ++ longopt
 
-data VibeCommand = Scan ScanOptions ScanTarget
-                 | Audit AuditOptions
+data VibeCommand
+  = Scan ScanOptions ScanTarget
+  | Audit AuditOptions
 
-data GlobalOptions = GlobalOptions {
-    verbose :: Maybe Bool
+data GlobalOptions = GlobalOptions
+  { verbose :: Maybe Bool
   }
 
-data ScanTarget = HackagePackage String
-                | RemoteRepo String
+data ScanTarget
+  = HackagePackage String
+  | RemoteRepo (Maybe String) String
 
-data ScanOptions = ScanOptions {
-    scanHistory  :: Maybe Bool
-  , scanFiles    :: Maybe Bool
+data ScanOptions = ScanOptions
+  { scanHistory :: Maybe Bool
+  , scanFiles :: Maybe Bool
   , scanKeeDirectory :: Maybe Bool
   }
 
-data AuditOptions = AuditOptions {
-    auditHistory :: Maybe Bool
-  , auditFiles   :: Maybe Bool
+data AuditOptions = AuditOptions
+  { auditHistory :: Maybe Bool
+  , auditFiles :: Maybe Bool
   , auditKeeDirectory :: Maybe Bool
+  , auditBuildPath :: FilePath
+  , auditExclude :: [Text]
   }
 
 globalOptionsP :: Parser GlobalOptions
@@ -85,6 +92,15 @@ auditOptionsP = AuditOptions
   <$> invertableSwitch "history"          Nothing True  (help "Scan the git history")
   <*> invertableSwitch "files"            Nothing True  (help "Scan for agent files")
   <*> invertableSwitch "keep-directories" Nothing False (help "Keep temporary directories")
+  <*> (option str (long "build-path"
+                  <> help "Path to cabal build directory (default: dist-newstyle)"
+                  <> value "dist-newstyle"
+                  )
+      )
+  <*> many (option str (long "exclude"
+                       <> help "Exclude a package from the audit"
+                       )
+           )
 
 scanOptionsP :: Parser ScanOptions
 scanOptionsP = ScanOptions
@@ -94,20 +110,54 @@ scanOptionsP = ScanOptions
 
 scanTargetP :: Parser ScanTarget
 scanTargetP = hsubparser $
-     command "hackage"    (HackagePackage <$> info (argument str (metavar "PACKAGE"   )) (progDesc "Scan a hackage package"  ))
-  <> command "repository" (RemoteRepo     <$> info (argument str (metavar "REPOSITORY")) (progDesc "Scan a retome repository"))
+     command "hackage"
+       (info (HackagePackage
+               <$> argument str (metavar "PACKAGE")
+             )
+             (progDesc "Scan a hackage package"  )
+       )
+  <> command "repository"
+       (info (RemoteRepo
+                <$> optional (option str (long "branch" <> help "branch to clone"))
+                <*> argument str (metavar "REPOSITORY")
+             )
+             (progDesc "Scan a retome repository")
+       )
 
 
 main :: IO ()
 main =
   execParser opts >>= \case
     (GlobalOptions{..}, Scan ScanOptions{..} (HackagePackage pkg )) -> do
-      res <- scanHackagePackage pkg (fromMaybe False verbose) (fromMaybe True scanFiles) (fromMaybe True scanHistory) (fromMaybe False scanKeeDirectory)
-      let bs = encodePretty res
-      putStrLn (T.unpack (TE.decodeUtf8 bs))
-    (GlobalOptions{..}, Scan ScanOptions{..} (RemoteRepo     repo)) -> do
-      putStrLn $ "Scan " <> repo
+      res <- scanHackagePackage
+        pkg
+        (fromMaybe False verbose)
+        (fromMaybe True scanFiles)
+        (fromMaybe True scanHistory)
+        (fromMaybe False scanKeeDirectory)
+      outputResult res
+    (GlobalOptions{..}, Scan ScanOptions{..} (RemoteRepo mBranch repo)) -> do
+      res <- scanRemoteRepo
+        repo
+        mBranch
+        (fromMaybe False verbose)
+        (fromMaybe True scanFiles)
+        (fromMaybe True scanHistory)
+        (fromMaybe False scanKeeDirectory)
+      outputResult res
+    (GlobalOptions{..}, Audit AuditOptions{..}) -> do
+      res <- audit
+        auditBuildPath
+        (fromMaybe False verbose)
+        (fromMaybe True auditFiles)
+        (fromMaybe True auditHistory)
+        (fromMaybe False auditKeeDirectory)
+        auditExclude
+      outputResult res
  where
+  outputResult res = do
+    let bs = encodePretty res
+    putStrLn (T.unpack (TE.decodeUtf8 bs))
   opts = info (((,) <$> globalOptionsP <*> vibeCommandP) <**> helper)
               (fullDesc
               <> progDesc "The ultimate vibecode scanner"

@@ -1,9 +1,15 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
+
 module VibeCode.Types.JSON where
 
 import VibeCode.Types
 
 import Data.Aeson
-import GHC.Generics
+
+instance ToJSON AuditResult where
+    toEncoding = genericToEncoding defaultOptions
+
+instance FromJSON AuditResult
 
 instance ToJSON ScanResult where
     toEncoding = genericToEncoding defaultOptions

@@ -1,12 +1,18 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
 module VibeCode.Scan where
 
 import VibeCode.Agents
+import VibeCode.Cabal
 import VibeCode.Logging
 import VibeCode.Types
 
+import Control.Exception            ( SomeException, displayException, try )
 import Control.Monad
+import Control.Monad.Except
+import Control.Monad.IO.Class       ( liftIO )
+import Data.Bifunctor               ( first )
 import Data.List
 import Data.Maybe
 import System.Directory
@@ -21,24 +27,53 @@ scanHackagePackage ::
   -> Bool    -- ^ scan files
   -> Bool    -- ^ scan history
   -> Bool    -- ^ keep directories
-  -> IO ScanResult
-scanHackagePackage pkg verbose scanFiles scanHistory keeDirectory = withTmp $ \tmp -> do
-  when keeDirectory $ logStderr $ "Working dir: " <> tmp
-  withCurrentDirectory tmp $ callProcess "cabal" ["get", "--verbose=0", "--source-repository=head", pkg]
-  (d:_) <- listDirectory tmp
+  -> IO (Either String ScanResult)
+scanHackagePackage resultPkg verbose scanFiles scanHistory keeDirectory = withTmp keeDirectory $ \tmp -> runExceptT $ do
+  liftIO $ when keeDirectory $ logStderr $ "Working dir: " <> tmp
+  liftIO $ logDebug verbose $ "Fetching " <> resultPkg
+  ExceptT $ fmap (first (displayException @SomeException))
+          $ try $ withCurrentDirectory tmp $ callProcess "cabal" ["get", "--verbose=0", "--source-repository=head", resultPkg]
+
+  (d:_) <- liftIO $ listDirectory tmp
   let cabal_dir = tmp </> d
 
-  resultAgent <- fmap catMaybes $ forM agents (scanAgent cabal_dir verbose scanFiles scanHistory)
+  resultAgent <- catMaybes <$> liftIO (forM agents (scanAgent cabal_dir verbose scanFiles scanHistory))
 
   pure $ ScanResult {..}
- where
-  withTmp action =
-    if keeDirectory
-    then do
-      tmp <- getCanonicalTemporaryDirectory
-      tmpUnique <- createTempDirectory tmp "vibecode-scanner"
-      action tmpUnique
-    else withSystemTempDirectory "vibecode-scanner" action
+
+scanRemoteRepo ::
+     String          -- ^ repository
+  -> Maybe String    -- ^ branch
+  -> Bool            -- ^ verbose
+  -> Bool            -- ^ scan files
+  -> Bool            -- ^ scan history
+  -> Bool            -- ^ keep directories
+  -> IO ScanResult
+scanRemoteRepo repository branch verbose scanFiles scanHistory keeDirectory = withTmp keeDirectory $ \tmp -> do
+  when keeDirectory $ logStderr $ "Working dir: " <> tmp
+  withCurrentDirectory tmp $
+    callProcess "git" $
+         ["-C", tmp, "clone"]
+      <> maybe [] (\b -> ["-b", b, "--single-branch"]) branch
+      <> [repository, "repo"]
+  let cabal_dir = tmp </> "repo"
+
+  (cabalFile:_) <- getDirectoryFiles cabal_dir ["*.cabal"]
+
+  (pkg, ver) <- getCabalVersion (cabal_dir </> cabalFile)
+  let resultPkg = pkg <> "-" <> ver
+  resultAgent <- catMaybes <$> forM agents (scanAgent cabal_dir verbose scanFiles scanHistory)
+
+  pure $ ScanResult {..}
+
+withTmp :: Bool -> (FilePath -> IO a) -> IO a
+withTmp keeDirectory action =
+  if keeDirectory
+  then do
+    tmp <- getCanonicalTemporaryDirectory
+    tmpUnique <- createTempDirectory tmp "vibecode-scanner"
+    action tmpUnique
+  else withSystemTempDirectory "vibecode-scanner" action
 
 
 scanAgent ::
@@ -100,11 +135,11 @@ findGetNeedle dir verbose needle =
     GitCommitMessage m -> do
       out <- readProcess "git" ["-C", dir, "log", "-i", "--format=%h", "--grep", m] ""
       let l = lines out
-      when (length l > 0) $ logDebug verbose $ "Found commit message " <> m
+      unless (null l) $ logDebug verbose $ "Found commit message " <> m
       pure l
     GitAuthor a -> do
       out <- readProcess "git" ["-C", dir, "log", "-i", "--format=%h", "--author", a] ""
       let l = lines out
-      when (length l > 0) $ logDebug verbose $ "Found commit author " <> a
+      unless (null l) $ logDebug verbose $ "Found commit author " <> a
       pure l
 
