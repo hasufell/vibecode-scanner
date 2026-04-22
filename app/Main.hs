@@ -52,6 +52,10 @@ invertableSwitch' longopt shortopt defv enmod dismod = optional
 data VibeCommand = Scan ScanOptions ScanTarget
                  | Audit AuditOptions
 
+data GlobalOptions = GlobalOptions {
+    verbose :: Maybe Bool
+  }
+
 data ScanTarget = HackagePackage String
                 | RemoteRepo String
 
@@ -66,6 +70,10 @@ data AuditOptions = AuditOptions {
   , auditFiles   :: Maybe Bool
   , auditKeeDirectory :: Maybe Bool
   }
+
+globalOptionsP :: Parser GlobalOptions
+globalOptionsP = GlobalOptions
+  <$> invertableSwitch "verbose" (Just 'v') False (help "Enable verbosity (default: disabled)")
 
 vibeCommandP :: Parser VibeCommand
 vibeCommandP = hsubparser $
@@ -93,14 +101,14 @@ scanTargetP = hsubparser $
 main :: IO ()
 main =
   execParser opts >>= \case
-    (Scan ScanOptions{..} (HackagePackage pkg )) -> do
-      res <- scanHackagePackage pkg (fromMaybe True scanFiles) (fromMaybe True scanHistory) (fromMaybe False scanKeeDirectory)
+    (GlobalOptions{..}, Scan ScanOptions{..} (HackagePackage pkg )) -> do
+      res <- scanHackagePackage pkg (fromMaybe False verbose) (fromMaybe True scanFiles) (fromMaybe True scanHistory) (fromMaybe False scanKeeDirectory)
       let bs = encodePretty res
       putStrLn (T.unpack (TE.decodeUtf8 bs))
-    (Scan ScanOptions{..} (RemoteRepo     repo)) -> do
+    (GlobalOptions{..}, Scan ScanOptions{..} (RemoteRepo     repo)) -> do
       putStrLn $ "Scan " <> repo
  where
-  opts = info (vibeCommandP <**> helper)
+  opts = info (((,) <$> globalOptionsP <*> vibeCommandP) <**> helper)
               (fullDesc
               <> progDesc "The ultimate vibecode scanner"
               )

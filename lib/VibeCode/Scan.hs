@@ -16,18 +16,19 @@ import System.IO.Temp
 import System.Process
 
 scanHackagePackage ::
-     String
-  -> Bool
-  -> Bool
-  -> Bool
+     String  -- ^ pkg name
+  -> Bool    -- ^ verbose
+  -> Bool    -- ^ scan files
+  -> Bool    -- ^ scan history
+  -> Bool    -- ^ keep directories
   -> IO ScanResult
-scanHackagePackage pkg scanFiles scanHistory keeDirectory = withTmp $ \tmp -> do
+scanHackagePackage pkg verbose scanFiles scanHistory keeDirectory = withTmp $ \tmp -> do
   when keeDirectory $ logStderr $ "Working dir: " <> tmp
-  withCurrentDirectory tmp $ callProcess "cabal" ["get", "--source-repository=head", pkg]
+  withCurrentDirectory tmp $ callProcess "cabal" ["get", "--verbose=0", "--source-repository=head", pkg]
   (d:_) <- listDirectory tmp
   let cabal_dir = tmp </> d
 
-  resultAgent <- fmap catMaybes $ forM agents (scanAgent cabal_dir scanFiles scanHistory)
+  resultAgent <- fmap catMaybes $ forM agents (scanAgent cabal_dir verbose scanFiles scanHistory)
 
   pure $ ScanResult {..}
  where
@@ -40,8 +41,14 @@ scanHackagePackage pkg scanFiles scanHistory keeDirectory = withTmp $ \tmp -> do
     else withSystemTempDirectory "vibecode-scanner" action
 
 
-scanAgent :: FilePath -> Bool -> Bool -> Agent -> IO (Maybe AgentResult)
-scanAgent dir scanFiles scanHistory Agent{..} = do
+scanAgent ::
+     FilePath  -- ^ working directory
+  -> Bool      -- ^ verbose
+  -> Bool      -- ^ scan files
+  -> Bool      -- ^ scan history
+  -> Agent
+  -> IO (Maybe AgentResult)
+scanAgent dir verbose scanFiles scanHistory Agent{..} = do
   let arName = aiName
 
   arFiles <-
@@ -49,7 +56,9 @@ scanAgent dir scanFiles scanHistory Agent{..} = do
     then fmap catMaybes $ forM aiFiles $ \f -> do
            fExists <- doesFileExist (dir </> f)
            if fExists
-           then pure (Just f)
+           then do
+             logDebug verbose $ "Found " <> f
+             pure (Just f)
            else pure Nothing
     else pure []
 
@@ -58,32 +67,44 @@ scanAgent dir scanFiles scanHistory Agent{..} = do
     then fmap catMaybes $ forM aiDirectories $ \d -> do
            dExists <- doesDirectoryExist (dir </> d)
            if dExists
-           then pure (Just d)
+           then do
+             logDebug verbose $ "Found " <> d
+             pure (Just d)
            else pure Nothing
     else pure []
 
   commitHashes <-
     if scanHistory
-    then forM aiGitNeedles (findGetNeedle dir)
+    then mconcat <$> forM aiGitNeedles (findGetNeedle dir verbose)
     else pure []
 
   let arCommits = length (nub commitHashes)
 
   let hit =  not (null arFiles)
           || not (null arDirectories)
-          || not (arCommits == 0)
+          ||     (arCommits > 0)
 
   if hit
-  then pure (Just AgentResult{..})
+  then do
+    logDebug verbose $ "Found agent " <> aiName
+    pure (Just AgentResult{..})
   else pure Nothing
 
-findGetNeedle :: FilePath -> GitNeedle -> IO [String]
-findGetNeedle dir needle =
+findGetNeedle ::
+     FilePath     -- ^ working directory
+  -> Bool         -- ^ verbose
+  -> GitNeedle    -- ^ git needle
+  -> IO [String]
+findGetNeedle dir verbose needle =
   case needle of
     GitCommitMessage m -> do
       out <- readProcess "git" ["-C", dir, "log", "-i", "--format=%h", "--grep", m] ""
-      pure (lines out)
+      let l = lines out
+      when (length l > 0) $ logDebug verbose $ "Found commit message " <> m
+      pure l
     GitAuthor a -> do
       out <- readProcess "git" ["-C", dir, "log", "-i", "--format=%h", "--author", a] ""
-      pure (lines out)
+      let l = lines out
+      when (length l > 0) $ logDebug verbose $ "Found commit author " <> a
+      pure l
 
