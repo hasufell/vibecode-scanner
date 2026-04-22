@@ -23,4 +23,6 @@ It does so by analyzing:
 ## TODO
 
 - [ ] Dhall support to overwrite/extend the [agents definition](https://github.com/hasufell/vibecode-scanner/blob/master/lib/VibeCode/Agents.hs)
+- [ ] scan non-haskell stuff
+- [ ] specify subdir when scanning a repo
 
