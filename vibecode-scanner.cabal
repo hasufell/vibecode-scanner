@@ -1,17 +1,22 @@
 cabal-version:      3.4
 name:               vibecode-scanner
 version:            0.1.0.0
--- synopsis:
--- description:
+synopsis:           Vibecode scanner
+description:
+  This package allows to scan hackage packages and git repos for signs of vibe coding.
 license:            LGPL-3.0-only
 license-file:       LICENSE
 author:             Julian Ospald
 maintainer:         hasufell@posteo.de
--- copyright:
+copyright:          Julian Ospald 2026
 category:           Control
 build-type:         Simple
 extra-doc-files:    CHANGELOG.md
 -- extra-source-files:
+
+source-repository head
+  type:     git
+  location: https://github.com/hasufell/vibecode-scanner.git
 
 common warnings
     ghc-options: -Wall -Wextra
