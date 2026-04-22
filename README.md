@@ -19,3 +19,8 @@ It does so by analyzing:
   * most cabal files only specify `head` and no tags, so we can't really check specific tags/versions
 * since we don't want to depend on `cabal-install` for getting project dependencies we parse `plan.json` and do some overly simplistic tricks
   * we run `cabal get` to fetch packages, so complicated configs with remote tarballs and third party repos won't work
+
+## TODO
+
+- [ ] Dhall support to overwrite/extend the [agents definition](https://github.com/hasufell/vibecode-scanner/blob/master/lib/VibeCode/Agents.hs)
+
