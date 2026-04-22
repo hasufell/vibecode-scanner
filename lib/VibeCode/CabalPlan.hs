@@ -10,6 +10,7 @@ module VibeCode.CabalPlan where
 import VibeCode.Logging
 import VibeCode.Types.CabalPlan
 
+import Prelude hiding ( id )
 import Data.Aeson
 import Data.List
 import Data.Text                 ( Text )

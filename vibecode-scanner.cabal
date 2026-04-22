@@ -17,6 +17,8 @@ common warnings
     ghc-options: -Wall
 
 library
+    if os(windows)
+      cpp-options:     -DIS_WINDOWS
     import:           warnings
     exposed-modules:  VibeCode.Audit
                       VibeCode.Agents
@@ -27,6 +29,7 @@ library
                       VibeCode.Types
                       VibeCode.Types.CabalPlan
                       VibeCode.Types.JSON
+                      VibeCode.Prelude
 
     -- other-modules:
     -- other-extensions:
@@ -39,10 +42,9 @@ library
                     , filepath
                     , filepattern
                     , generic-lens
-                    , lens
                     , mtl
-                    , oops
-                    , process
+                    , process ^>=1.6.28.0
+                    , safe-exceptions
                     , temporary
                     , text
                     , topograph

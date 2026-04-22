@@ -5,8 +5,12 @@ module VibeCode.Types where
 import GHC.Generics
 
 data ScanResult = ScanResult
-  { resultPkg :: String
-  , resultAgent :: [AgentResult]
+  { scannedPkg :: String
+  , scannedAgents :: [AgentResult]
+  } |
+  ScanResultError
+  { scannedPkg :: String
+  , scanError :: String
   }
   deriving (Eq, Generic, Show)
 

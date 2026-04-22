@@ -6,9 +6,10 @@ module VibeCode.Scan where
 import VibeCode.Agents
 import VibeCode.Cabal
 import VibeCode.Logging
+import VibeCode.Prelude
 import VibeCode.Types
 
-import Control.Exception            ( SomeException, displayException, try )
+import Control.Exception.Safe       ( SomeException, displayException, try )
 import Control.Monad
 import Control.Monad.Except
 import Control.Monad.IO.Class       ( liftIO )
@@ -27,19 +28,33 @@ scanHackagePackage ::
   -> Bool    -- ^ scan files
   -> Bool    -- ^ scan history
   -> Bool    -- ^ keep directories
-  -> IO (Either String ScanResult)
-scanHackagePackage resultPkg verbose scanFiles scanHistory keeDirectory = withTmp keeDirectory $ \tmp -> runExceptT $ do
-  liftIO $ when keeDirectory $ logStderr $ "Working dir: " <> tmp
-  liftIO $ logDebug verbose $ "Fetching " <> resultPkg
-  ExceptT $ fmap (first (displayException @SomeException))
-          $ try $ withCurrentDirectory tmp $ callProcess "cabal" ["get", "--verbose=0", "--source-repository=head", resultPkg]
+  -> IO ScanResult
+scanHackagePackage resultPkg verbose scanFiles scanHistory keeDirectory = fmap (either (ScanResultError resultPkg) (ScanResult resultPkg)) $
+  withSystemTempDirectory "vibecode-scanner-bin" $ \bin -> withTmp keeDirectory $ \tmp -> runExceptT $ do
+    let git = bin </> "git"
+    origGit <- ExceptT $ maybe (Left "No git executable found") Right <$> liftIO (findExecutable "git")
+    liftIO $ do
+      writeFile git (gitScript origGit)
+      setPermissions git (emptyPermissions { executable = True, readable = True, writable = True, searchable = True })
+    newEnv <- liftIO $ addToPath [bin] False
 
-  (d:_) <- liftIO $ listDirectory tmp
-  let cabal_dir = tmp </> d
+    liftIO $ when keeDirectory $ logStderr $ "Working dir: " <> tmp
+    liftIO $ logDebug verbose $ "Fetching " <> resultPkg
+    ExceptT $ fmap (first (displayException @SomeException))
+            $ try $ withCurrentDirectory tmp
+            $ callCreateProcess (proc "cabal" ["get", "--verbose=0", "--source-repository=head", resultPkg]){ env = Just newEnv }
 
-  resultAgent <- catMaybes <$> liftIO (forM agents (scanAgent cabal_dir verbose scanFiles scanHistory))
+    (d:_) <- liftIO $ listDirectory tmp
+    let cabal_dir = tmp </> d
 
-  pure $ ScanResult {..}
+    resultAgent <- catMaybes <$> liftIO (forM agents (scanAgent cabal_dir verbose scanFiles scanHistory))
+
+    pure resultAgent
+ where
+  gitScript origGit =
+    unlines [ "#!/bin/sh"
+            , "exec " <> origGit <> " -c url.\"https://github.com/\".insteadOf=\"git://github.com/\" \"$@\""
+            ]
 
 scanRemoteRepo ::
      String          -- ^ repository
@@ -49,22 +64,23 @@ scanRemoteRepo ::
   -> Bool            -- ^ scan history
   -> Bool            -- ^ keep directories
   -> IO ScanResult
-scanRemoteRepo repository branch verbose scanFiles scanHistory keeDirectory = withTmp keeDirectory $ \tmp -> do
-  when keeDirectory $ logStderr $ "Working dir: " <> tmp
-  withCurrentDirectory tmp $
-    callProcess "git" $
-         ["-C", tmp, "clone"]
-      <> maybe [] (\b -> ["-b", b, "--single-branch"]) branch
-      <> [repository, "repo"]
-  let cabal_dir = tmp </> "repo"
+scanRemoteRepo repository branch verbose scanFiles scanHistory keeDirectory =
+  withTmp keeDirectory $ \tmp -> do
+    when keeDirectory $ logStderr $ "Working dir: " <> tmp
+    withCurrentDirectory tmp $
+      callProcess "git" $
+           ["-C", tmp, "clone"]
+        <> maybe [] (\b -> ["-b", b, "--single-branch"]) branch
+        <> [repository, "repo"]
+    let cabal_dir = tmp </> "repo"
 
-  (cabalFile:_) <- getDirectoryFiles cabal_dir ["*.cabal"]
+    (cabalFile:_) <- getDirectoryFiles cabal_dir ["*.cabal"]
 
-  (pkg, ver) <- getCabalVersion (cabal_dir </> cabalFile)
-  let resultPkg = pkg <> "-" <> ver
-  resultAgent <- catMaybes <$> forM agents (scanAgent cabal_dir verbose scanFiles scanHistory)
+    (pkg, ver) <- getCabalVersion (cabal_dir </> cabalFile)
+    let resultPkg = pkg <> "-" <> ver
+    resultAgent <- catMaybes <$> forM agents (scanAgent cabal_dir verbose scanFiles scanHistory)
 
-  pure $ ScanResult {..}
+    pure $ ScanResult resultPkg resultAgent
 
 withTmp :: Bool -> (FilePath -> IO a) -> IO a
 withTmp keeDirectory action =

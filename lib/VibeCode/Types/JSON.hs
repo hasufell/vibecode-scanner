@@ -6,28 +6,24 @@ import VibeCode.Types
 
 import Data.Aeson
 
-instance ToJSON AuditResult where
-    toEncoding = genericToEncoding defaultOptions
+import qualified Data.Text as T
 
-instance FromJSON AuditResult
+instance ToJSON AuditResult where
+    toJSON = genericToJSON defaultOptions
 
 instance ToJSON ScanResult where
-    toEncoding = genericToEncoding defaultOptions
-
-instance FromJSON ScanResult
+    toJSON = genericToJSON defaultOptions { sumEncoding = UntaggedValue }
 
 instance ToJSON AgentResult where
-    toEncoding = genericToEncoding defaultOptions
-
-instance FromJSON AgentResult
+    toJSON = genericToJSON defaultOptions { fieldLabelModifier = T.unpack . T.drop 2 . T.toLower . T.pack }
 
 instance ToJSON Agent where
-    toEncoding = genericToEncoding defaultOptions
+    toJSON = genericToJSON defaultOptions
 
 instance FromJSON Agent
 
 instance ToJSON GitNeedle where
-    toEncoding = genericToEncoding defaultOptions
+    toJSON = genericToJSON defaultOptions
 
 instance FromJSON GitNeedle
 
