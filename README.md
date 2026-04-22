@@ -1,6 +1,6 @@
 # Vibecode scanner
 
-This project can scan projects for signs of vibe coding. It can:
+This tool detects vibe coded projects. It can:
 
 * scan hackage packages
 * scan git repositories
