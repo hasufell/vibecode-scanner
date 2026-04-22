@@ -92,11 +92,10 @@ auditOptionsP = AuditOptions
   <$> invertableSwitch "history"          Nothing True  (help "Scan the git history")
   <*> invertableSwitch "files"            Nothing True  (help "Scan for agent files")
   <*> invertableSwitch "keep-directories" Nothing False (help "Keep temporary directories")
-  <*> (option str (long "build-path"
+  <*> option str (long "build-path"
                   <> help "Path to cabal build directory (default: dist-newstyle)"
                   <> value "dist-newstyle"
                   )
-      )
   <*> many (option str (long "exclude"
                        <> help "Exclude a package from the audit"
                        )

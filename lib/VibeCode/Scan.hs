@@ -47,9 +47,7 @@ scanHackagePackage resultPkg verbose scanFiles scanHistory keeDirectory = fmap (
     (d:_) <- liftIO $ listDirectory tmp
     let cabal_dir = tmp </> d
 
-    resultAgent <- catMaybes <$> liftIO (forM agents (scanAgent cabal_dir verbose scanFiles scanHistory))
-
-    pure resultAgent
+    catMaybes <$> liftIO (forM agents (scanAgent cabal_dir verbose scanFiles scanHistory))
  where
   gitScript origGit =
     unlines [ "#!/bin/sh"
