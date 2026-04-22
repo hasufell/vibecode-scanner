@@ -1,0 +1,4 @@
+packages: ./vibecode-scanner.cabal
+
+package aeson-pretty
+  flags: +lib-only
