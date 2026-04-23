@@ -21,9 +21,10 @@ audit ::
   -> Bool
   -> Bool
   -> Bool
+  -> Bool
   -> [Text]
   -> IO AuditResult
-audit buildDir verbose scanFiles scanHistory keeDirectory exclude = do
+audit buildDir verbose scanFiles scanHistory commitDetails keepDirectory exclude = do
   deps <- filter (\(pkg, _) -> pkg `notElem` exclude) <$> getDependencies buildDir verbose
   r <- forM (nub deps)
     $ \(pkg, ver) -> do
@@ -32,7 +33,8 @@ audit buildDir verbose scanFiles scanHistory keeDirectory exclude = do
                 verbose
                 scanFiles
                 scanHistory
-                keeDirectory
+                commitDetails
+                keepDirectory
   let auditResult = filter (\case
                              ScanResult{..} -> (not . null) scannedAgents
                              ScanResultError _ _ -> True

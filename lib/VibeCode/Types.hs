@@ -24,6 +24,7 @@ data AgentResult = AgentResult
   , arFiles :: [FilePath]
   , arDirectories :: [FilePath]
   , arCommits :: Int
+  , arCommitDetails :: Maybe [String]
   }
   deriving (Eq, Generic, Show)
 

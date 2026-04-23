@@ -27,10 +27,11 @@ scanHackagePackage ::
   -> Bool    -- ^ verbose
   -> Bool    -- ^ scan files
   -> Bool    -- ^ scan history
+  -> Bool    -- ^ show detailed commits
   -> Bool    -- ^ keep directories
   -> IO ScanResult
-scanHackagePackage resultPkg verbose scanFiles scanHistory keeDirectory = fmap (either (ScanResultError resultPkg) (ScanResult resultPkg)) $
-  withSystemTempDirectory "vibecode-scanner-bin" $ \bin -> withTmp keeDirectory $ \tmp -> runExceptT $ do
+scanHackagePackage resultPkg verbose scanFiles scanHistory commitDetails keepDirectory = fmap (either (ScanResultError resultPkg) (ScanResult resultPkg)) $
+  withSystemTempDirectory "vibecode-scanner-bin" $ \bin -> withTmp keepDirectory $ \tmp -> runExceptT $ do
     let git = bin </> "git"
     origGit <- ExceptT $ maybe (Left "No git executable found") Right <$> liftIO (findExecutable "git")
     liftIO $ do
@@ -38,7 +39,7 @@ scanHackagePackage resultPkg verbose scanFiles scanHistory keeDirectory = fmap (
       setPermissions git (emptyPermissions { executable = True, readable = True, writable = True, searchable = True })
     newEnv <- liftIO $ addToPath [bin] False
 
-    liftIO $ when keeDirectory $ logStderr $ "Working dir: " <> tmp
+    liftIO $ when keepDirectory $ logStderr $ "Working dir: " <> tmp
     liftIO $ logDebug verbose $ "Fetching " <> resultPkg
     ExceptT $ fmap (first (displayException @SomeException))
             $ try $ withCurrentDirectory tmp
@@ -47,7 +48,7 @@ scanHackagePackage resultPkg verbose scanFiles scanHistory keeDirectory = fmap (
     (d:_) <- liftIO $ listDirectory tmp
     let cabal_dir = tmp </> d
 
-    catMaybes <$> liftIO (forM agents (scanAgent cabal_dir verbose scanFiles scanHistory))
+    catMaybes <$> liftIO (forM agents (scanAgent cabal_dir verbose scanFiles scanHistory commitDetails))
  where
   gitScript origGit =
     unlines [ "#!/bin/sh"
@@ -60,29 +61,41 @@ scanRemoteRepo ::
   -> Bool            -- ^ verbose
   -> Bool            -- ^ scan files
   -> Bool            -- ^ scan history
+  -> Bool            -- ^ show detailed commits
   -> Bool            -- ^ keep directories
   -> IO ScanResult
-scanRemoteRepo repository branch verbose scanFiles scanHistory keeDirectory =
-  withTmp keeDirectory $ \tmp -> do
-    when keeDirectory $ logStderr $ "Working dir: " <> tmp
+scanRemoteRepo repository branch verbose scanFiles scanHistory commitDetails keepDirectory =
+  withTmp keepDirectory $ \tmp -> do
+    when keepDirectory $ logStderr $ "Working dir: " <> tmp
     withCurrentDirectory tmp $
       callProcess "git" $
            ["-C", tmp, "clone"]
         <> maybe [] (\b -> ["-b", b, "--single-branch"]) branch
         <> [repository, "repo"]
     let cabal_dir = tmp </> "repo"
+    scanLocalDir cabal_dir verbose scanFiles scanHistory commitDetails
 
-    (cabalFile:_) <- getDirectoryFiles cabal_dir ["*.cabal"]
+scanLocalDir ::
+     FilePath        -- ^ repository
+  -> Bool            -- ^ verbose
+  -> Bool            -- ^ scan files
+  -> Bool            -- ^ scan history
+  -> Bool            -- ^ show detailed commits
+  -> IO ScanResult
+scanLocalDir cabal_dir verbose scanFiles scanHistory commitDetails = do
+  r <- getDirectoryFiles cabal_dir ["*.cabal"]
+  (pkg, ver) <- case r of
+    (cabalFile:_) -> getCabalVersion (cabal_dir </> cabalFile)
+    _ -> pure ("unknown", "unknown")
 
-    (pkg, ver) <- getCabalVersion (cabal_dir </> cabalFile)
-    let resultPkg = pkg <> "-" <> ver
-    resultAgent <- catMaybes <$> forM agents (scanAgent cabal_dir verbose scanFiles scanHistory)
+  let resultPkg = pkg <> "-" <> ver
+  resultAgent <- catMaybes <$> forM agents (scanAgent cabal_dir verbose scanFiles scanHistory commitDetails)
 
-    pure $ ScanResult resultPkg resultAgent
+  pure $ ScanResult resultPkg resultAgent
 
 withTmp :: Bool -> (FilePath -> IO a) -> IO a
-withTmp keeDirectory action =
-  if keeDirectory
+withTmp keepDirectory action =
+  if keepDirectory
   then do
     tmp <- getCanonicalTemporaryDirectory
     tmpUnique <- createTempDirectory tmp "vibecode-scanner"
@@ -95,9 +108,10 @@ scanAgent ::
   -> Bool      -- ^ verbose
   -> Bool      -- ^ scan files
   -> Bool      -- ^ scan history
+  -> Bool      -- ^ show detailed commits
   -> Agent
   -> IO (Maybe AgentResult)
-scanAgent dir verbose scanFiles scanHistory Agent{..} = do
+scanAgent dir verbose scanFiles scanHistory commitDetails Agent{..} = do
   let arName = aiName
 
   arFiles <-
@@ -122,12 +136,13 @@ scanAgent dir verbose scanFiles scanHistory Agent{..} = do
            else pure Nothing
     else pure []
 
-  commitHashes <-
+  commits <-
     if scanHistory
     then mconcat <$> forM aiGitNeedles (findGetNeedle dir verbose)
     else pure []
 
-  let arCommits = length (nub commitHashes)
+  let arCommits = length (nub commits)
+  let arCommitDetails = if commitDetails then Just (nub commits) else Nothing
 
   let hit =  not (null arFiles)
           || not (null arDirectories)
@@ -147,12 +162,12 @@ findGetNeedle ::
 findGetNeedle dir verbose needle =
   case needle of
     GitCommitMessage m -> do
-      out <- readProcess "git" ["-C", dir, "log", "-i", "--format=%h", "--grep", m] ""
+      out <- readProcess "git" ["-C", dir, "log", "-i", "--format=%h (%an): %s", "--grep", m] ""
       let l = lines out
       unless (null l) $ logDebug verbose $ "Found commit message " <> m
       pure l
     GitAuthor a -> do
-      out <- readProcess "git" ["-C", dir, "log", "-i", "--format=%h", "--author", a] ""
+      out <- readProcess "git" ["-C", dir, "log", "-i", "--format=%h (%an): %s", "--author", a] ""
       let l = lines out
       unless (null l) $ logDebug verbose $ "Found commit author " <> a
       pure l

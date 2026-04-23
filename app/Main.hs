@@ -4,7 +4,7 @@
 module Main where
 
 import VibeCode.Audit      ( audit )
-import VibeCode.Scan       ( scanHackagePackage, scanRemoteRepo )
+import VibeCode.Scan
 import VibeCode.Types.JSON
     ()
 
@@ -58,11 +58,13 @@ data VibeCommand
 
 data GlobalOptions = GlobalOptions
   { verbose :: Maybe Bool
+  , detailedOutput :: Maybe Bool
   }
 
 data ScanTarget
   = HackagePackage String
   | RemoteRepo (Maybe String) String
+  | LocalDir FilePath
 
 data ScanOptions = ScanOptions
   { scanHistory :: Maybe Bool
@@ -81,6 +83,7 @@ data AuditOptions = AuditOptions
 globalOptionsP :: Parser GlobalOptions
 globalOptionsP = GlobalOptions
   <$> invertableSwitch "verbose" (Just 'v') False (help "Enable verbosity (default: disabled)")
+  <*> invertableSwitch "details" (Just 'd') False (help "Enable detailed output (default: disabled)")
 
 vibeCommandP :: Parser VibeCommand
 vibeCommandP = hsubparser $
@@ -122,6 +125,12 @@ scanTargetP = hsubparser $
              )
              (progDesc "Scan a retome repository")
        )
+  <> command "local-directory"
+       (info (LocalDir
+                <$> argument str (metavar "DIRECTORY")
+             )
+             (progDesc "Scan a retome repository")
+       )
 
 
 main :: IO ()
@@ -133,6 +142,7 @@ main =
         (fromMaybe False verbose)
         (fromMaybe True scanFiles)
         (fromMaybe True scanHistory)
+        (fromMaybe False detailedOutput)
         (fromMaybe False scanKeeDirectory)
       outputResult res
     (GlobalOptions{..}, Scan ScanOptions{..} (RemoteRepo mBranch repo)) -> do
@@ -142,7 +152,16 @@ main =
         (fromMaybe False verbose)
         (fromMaybe True scanFiles)
         (fromMaybe True scanHistory)
+        (fromMaybe False detailedOutput)
         (fromMaybe False scanKeeDirectory)
+      outputResult res
+    (GlobalOptions{..}, Scan ScanOptions{..} (LocalDir dir)) -> do
+      res <- scanLocalDir
+        dir
+        (fromMaybe False verbose)
+        (fromMaybe True scanFiles)
+        (fromMaybe True scanHistory)
+        (fromMaybe False detailedOutput)
       outputResult res
     (GlobalOptions{..}, Audit AuditOptions{..}) -> do
       res <- audit
@@ -150,6 +169,7 @@ main =
         (fromMaybe False verbose)
         (fromMaybe True auditFiles)
         (fromMaybe True auditHistory)
+        (fromMaybe False detailedOutput)
         (fromMaybe False auditKeeDirectory)
         auditExclude
       outputResult res
