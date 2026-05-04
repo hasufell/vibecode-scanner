@@ -23,14 +23,15 @@ import System.IO.Temp
 import System.Process
 
 scanHackagePackage ::
-     String  -- ^ pkg name
+     Maybe FilePath -- agents definition, if any
+  -> String  -- ^ pkg name
   -> Bool    -- ^ verbose
   -> Bool    -- ^ scan files
   -> Bool    -- ^ scan history
   -> Bool    -- ^ show detailed commits
   -> Bool    -- ^ keep directories
   -> IO ScanResult
-scanHackagePackage resultPkg verbose scanFiles scanHistory commitDetails keepDirectory = fmap (either (ScanResultError resultPkg) (ScanResult resultPkg)) $
+scanHackagePackage agentsDef resultPkg verbose scanFiles scanHistory commitDetails keepDirectory = fmap (either (ScanResultError resultPkg) (ScanResult resultPkg)) $
   withSystemTempDirectory "vibecode-scanner-bin" $ \bin -> withTmp keepDirectory $ \tmp -> runExceptT $ do
     let git = bin </> "git"
     origGit <- ExceptT $ maybe (Left "No git executable found") Right <$> liftIO (findExecutable "git")
@@ -48,6 +49,7 @@ scanHackagePackage resultPkg verbose scanFiles scanHistory commitDetails keepDir
     (d:_) <- liftIO $ listDirectory tmp
     let cabal_dir = tmp </> d
 
+    agents <- liftIO $ getAgents agentsDef
     catMaybes <$> liftIO (forM agents (scanAgent cabal_dir verbose scanFiles scanHistory commitDetails))
  where
   gitScript origGit =
@@ -56,7 +58,8 @@ scanHackagePackage resultPkg verbose scanFiles scanHistory commitDetails keepDir
             ]
 
 scanRemoteRepo ::
-     String          -- ^ repository
+     Maybe FilePath -- agents definition, if any
+  -> String          -- ^ repository
   -> Maybe String    -- ^ branch
   -> Bool            -- ^ verbose
   -> Bool            -- ^ scan files
@@ -64,7 +67,7 @@ scanRemoteRepo ::
   -> Bool            -- ^ show detailed commits
   -> Bool            -- ^ keep directories
   -> IO ScanResult
-scanRemoteRepo repository branch verbose scanFiles scanHistory commitDetails keepDirectory =
+scanRemoteRepo agentsDef repository branch verbose scanFiles scanHistory commitDetails keepDirectory =
   withTmp keepDirectory $ \tmp -> do
     when keepDirectory $ logStderr $ "Working dir: " <> tmp
     withCurrentDirectory tmp $
@@ -73,22 +76,24 @@ scanRemoteRepo repository branch verbose scanFiles scanHistory commitDetails kee
         <> maybe [] (\b -> ["-b", b, "--single-branch"]) branch
         <> [repository, "repo"]
     let cabal_dir = tmp </> "repo"
-    scanLocalDir cabal_dir verbose scanFiles scanHistory commitDetails
+    scanLocalDir agentsDef cabal_dir verbose scanFiles scanHistory commitDetails
 
 scanLocalDir ::
-     FilePath        -- ^ repository
+     Maybe FilePath -- agents definition, if any
+  -> FilePath        -- ^ repository
   -> Bool            -- ^ verbose
   -> Bool            -- ^ scan files
   -> Bool            -- ^ scan history
   -> Bool            -- ^ show detailed commits
   -> IO ScanResult
-scanLocalDir cabal_dir verbose scanFiles scanHistory commitDetails = do
+scanLocalDir agentsDef cabal_dir verbose scanFiles scanHistory commitDetails = do
   r <- getDirectoryFiles cabal_dir ["*.cabal"]
   (pkg, ver) <- case r of
     (cabalFile:_) -> getCabalVersion (cabal_dir </> cabalFile)
     _ -> pure ("unknown", "unknown")
 
   let resultPkg = pkg <> "-" <> ver
+  agents <- liftIO $ getAgents agentsDef
   resultAgent <- catMaybes <$> forM agents (scanAgent cabal_dir verbose scanFiles scanHistory commitDetails)
 
   pure $ ScanResult resultPkg resultAgent

@@ -1,10 +1,14 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
 module Main where
 
-import VibeCode.Audit      ( audit )
+import VibeCode.Audit       ( audit )
 import VibeCode.Scan
+import VibeCode.Types
+import VibeCode.Types.Dhall
+    ()
 import VibeCode.Types.JSON
     ()
 
@@ -13,8 +17,12 @@ import Data.Maybe
 import Data.Text                ( Text )
 import Options.Applicative
 
+import qualified Data.Either.Validation  as Validation
+import qualified Data.Text.IO            as T
 import qualified Data.Text.Lazy          as T
 import qualified Data.Text.Lazy.Encoding as TE
+import qualified Dhall
+import qualified Dhall.Core
 
 -- https://github.com/pcapriotti/optparse-applicative/issues/148
 
@@ -55,10 +63,12 @@ invertableSwitch' longopt shortopt defv enmod dismod = optional
 data VibeCommand
   = Scan ScanOptions ScanTarget
   | Audit AuditOptions
+  | GenerateDhallSchema
 
 data GlobalOptions = GlobalOptions
   { verbose :: Maybe Bool
   , detailedOutput :: Maybe Bool
+  , agentFile :: Maybe FilePath
   }
 
 data ScanTarget
@@ -84,11 +94,13 @@ globalOptionsP :: Parser GlobalOptions
 globalOptionsP = GlobalOptions
   <$> invertableSwitch "verbose" (Just 'v') False (help "Enable verbosity (default: disabled)")
   <*> invertableSwitch "details" (Just 'd') False (help "Enable detailed output (default: disabled)")
+  <*> optional (option str (long "agent-file" <> help "Read the agents definition from the given file"))
 
 vibeCommandP :: Parser VibeCommand
 vibeCommandP = hsubparser $
      command "scan"  (info (Scan <$> scanOptionsP <*> scanTargetP) (progDesc "Scan for LLM garbage"     ))
   <> command "audit" (info (Audit <$> auditOptionsP)               (progDesc "Audit the current project"))
+  <> command "generate-dhall-schema" (info (pure GenerateDhallSchema) (progDesc "Generate Dhall schema for agents definition"))
 
 auditOptionsP :: Parser AuditOptions
 auditOptionsP = AuditOptions
@@ -138,6 +150,7 @@ main =
   execParser opts >>= \case
     (GlobalOptions{..}, Scan ScanOptions{..} (HackagePackage pkg )) -> do
       res <- scanHackagePackage
+        agentFile
         pkg
         (fromMaybe False verbose)
         (fromMaybe True scanFiles)
@@ -147,6 +160,7 @@ main =
       outputResult res
     (GlobalOptions{..}, Scan ScanOptions{..} (RemoteRepo mBranch repo)) -> do
       res <- scanRemoteRepo
+        agentFile
         repo
         mBranch
         (fromMaybe False verbose)
@@ -157,6 +171,7 @@ main =
       outputResult res
     (GlobalOptions{..}, Scan ScanOptions{..} (LocalDir dir)) -> do
       res <- scanLocalDir
+        agentFile
         dir
         (fromMaybe False verbose)
         (fromMaybe True scanFiles)
@@ -165,6 +180,7 @@ main =
       outputResult res
     (GlobalOptions{..}, Audit AuditOptions{..}) -> do
       res <- audit
+        agentFile
         auditBuildPath
         (fromMaybe False verbose)
         (fromMaybe True auditFiles)
@@ -173,6 +189,12 @@ main =
         (fromMaybe False auditKeeDirectory)
         auditExclude
       outputResult res
+    (_, GenerateDhallSchema) -> do
+      case Dhall.expected (Dhall.auto @Agent) of
+          Validation.Success result -> do
+            T.putStrLn (Dhall.Core.pretty result)
+          Validation.Failure errors -> do
+            fail (show errors)
  where
   outputResult res = do
     let bs = encodePretty res
@@ -181,3 +203,5 @@ main =
               (fullDesc
               <> progDesc "The ultimate vibecode scanner"
               )
+
+

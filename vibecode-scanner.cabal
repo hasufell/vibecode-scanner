@@ -12,7 +12,7 @@ copyright:          Julian Ospald 2026
 category:           Control
 build-type:         Simple
 extra-doc-files:    CHANGELOG.md
--- extra-source-files:
+extra-source-files: agents/default.dhall
 
 source-repository head
   type:     git
@@ -35,6 +35,7 @@ library
       VibeCode.Scan
       VibeCode.Types
       VibeCode.Types.CabalPlan
+      VibeCode.Types.Dhall
       VibeCode.Types.JSON
       VibeCode.Prelude
 
@@ -46,15 +47,19 @@ library
       , aeson-pretty >= 0.8.10 && < 0.9
       , base >= 4.18.3 && < 9999
       , bytestring >= 0.11.5 && < 0.12
+      , dhall >= 1.42.3 && < 1.43
       , containers >= 0.6.7 && < 0.7
       , directory >= 1.3.8 && < 1.4
+      , either
       , filepath >= 1.4.301 && < 1.5
+      , file-embed
       , filepattern >= 0.1.3 && < 0.2
       , generic-lens >= 2.3.0 && < 2.4
       , mtl >= 2.3.1 && < 2.4
       , process >= 1.6.28 && < 1.7
       , safe-exceptions >= 0.1.7 && < 0.2
       , temporary >= 1.3 && < 1.4
+      , template-haskell
       , text >= 2.0.2 && < 2.1
       , topograph >= 1.0.1 && < 1.1
     hs-source-dirs:   lib
@@ -68,6 +73,8 @@ executable vibecode-scanner
     build-depends:
       , aeson-pretty ^>=0.8.10
       , base >=4.18.3 && < 9999
+      , dhall >= 1.42.3 && < 1.43
+      , either
       , optparse-applicative ^>=0.19.0.0
       , text >= 2.0.2 && < 2.1
       , vibecode-scanner

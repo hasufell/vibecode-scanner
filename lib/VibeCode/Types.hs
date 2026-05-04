@@ -1,8 +1,10 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveLift #-}
 
 module VibeCode.Types where
 
 import GHC.Generics
+import Language.Haskell.TH.Syntax (Lift)
 
 data ScanResult = ScanResult
   { scannedPkg :: String
@@ -35,13 +37,10 @@ data Agent = Agent
   , aiDirectories :: [FilePath]
   , aiGitNeedles :: [GitNeedle]
   }
-  deriving (Eq, Generic, Show)
+  deriving (Eq, Generic, Show, Lift)
 
 data GitNeedle
   = GitCommitMessage String
   | GitAuthor String
-  deriving (Eq, Generic, Show)
-
-
-
+  deriving (Eq, Generic, Show, Lift)
 
